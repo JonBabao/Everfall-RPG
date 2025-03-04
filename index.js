@@ -1,9 +1,14 @@
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
-config();
+config()
 
-const TOKEN = process.env.DISCORD_TOKEN;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-import { Client, Events, GatewayIntentBits } from 'discord.js';
+let TOKEN = process.env.DISCORD_TOKEN
+
+import { Client, Collection, Events, GatewayIntentBits } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -18,8 +23,8 @@ for (const folder of commandFolders) {
 	const commandsPath = path.join(foldersPath, folder);
 	const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 	for (const file of commandFiles) {
-		const filePath = path.join(commandsPath, file);
-		const command = require(filePath);
+        const filePath = `file://${path.join(commandsPath, file)}`;
+        const command = await import(filePath);
 		// Set a new item in the Collection with the key as the command name and the value as the exported module
 		if ('data' in command && 'execute' in command) {
 			client.commands.set(command.data.name, command);
