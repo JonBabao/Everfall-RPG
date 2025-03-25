@@ -1,4 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { supabase } from '../../supabase/supabase.js'
+import { getRaceBonuses } from '../../utils/characterUtils.js';
 
 export const data = new SlashCommandBuilder()
     .setName('create')
@@ -26,7 +28,6 @@ export const execute = async (interaction) => {
         return;
     }
 
-    // Step 1: Create an embed
     const raceEmbed = new EmbedBuilder()
         .setTitle("Choose Your Class")
         .setDescription(
@@ -56,7 +57,6 @@ export const execute = async (interaction) => {
             `)
         .setColor(0x00AE86);
 
-    // Step 2: Create buttons for class selection
     const raceRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
@@ -81,17 +81,15 @@ export const execute = async (interaction) => {
                 .setStyle(ButtonStyle.Primary),
         );
 
-    // Step 3: Send the embed with buttons
     await interaction.reply({ embeds: [raceEmbed], components: [raceRow] });
 
-    // Step 4: Create a collector to handle button clicks
     const raceFilter = (i) => i.isButton() && i.user.id === interaction.user.id;
     const raceCollector = interaction.channel.createMessageComponentCollector({ raceFilter, time: 30000 });
 
     raceCollector.on('collect', async (buttonInteraction) => {
         let race = null;
 
-        switch (buttonInteraction.customId) {  // ✅ Fixed `customId`
+        switch (buttonInteraction.customId) {  
             case 'human':
                 race = 'Human';
                 break;
@@ -205,12 +203,61 @@ export const execute = async (interaction) => {
                 }
 
                 if (weapon) {
-                    await weaponInteraction.update({
-                        content: `**${characterName}**, the **${race}**, you have chosen the **${weapon}**!\n\n**Welcome to the world of Everfall!**`,
-                        components: [],
-                        embeds: [],
-                    });
-                    weaponCollector.stop();
+                    try {
+                        const stats = getRaceBonuses(race);
+        
+                        const characterData = {
+                            id: interaction.user.id,
+                            name: characterName,
+                            race: race,
+                            str: stats.str,
+                            con: stats.con,
+                            dex: stats.dex,
+                            agi: stats.agi,
+                            int: stats.int,
+                        };
+
+                        const { data: weaponItem, error: weaponError } = await supabase
+                            .from('items')
+                            .select('id')
+                            .eq('name', weapon)
+                            .single();
+                
+                        if (weaponError || !weaponItem) {
+                            throw new Error('Weapon not found in database');
+                        }
+                
+                        const { error: charError } = await supabase
+                            .from('player')
+                            .upsert(characterData, { onConflict: 'id' });
+                
+                        if (charError) throw charError;
+                
+                        const { error: invError } = await supabase
+                            .from('inventory')
+                            .insert([{
+                                player_id: interaction.user.id,
+                                item_id: weaponItem.id,
+                            }]);
+                
+                        if (invError) throw invError;
+                
+                        await weaponInteraction.update({
+                            content: `✅ **${characterName}**, the **${race}**, you have chosen the **${weapon}**!\n\n**Welcome to the world of Everfall!**`,
+                            components: [],
+                            embeds: [],
+                        });
+                
+                    } catch (error) {
+                        console.error('Character creation error:', error);
+                        await weaponInteraction.update({
+                            content: "❌ Failed to complete character creation! Please try again.",
+                            components: [],
+                            embeds: [],
+                        });
+                    } finally {
+                        weaponCollector.stop();
+                    }
                 }
             });
 
