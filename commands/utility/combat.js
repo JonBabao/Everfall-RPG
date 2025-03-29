@@ -67,12 +67,12 @@ export const execute = async (interaction) => {
     }
 
     const createCombatEmbed = () => new EmbedBuilder()
-    .setTitle(`${character.name} VS ${enemy.name}`)
-    .setDescription(`
-        ${character.name}'s HP: ${character.current_hp}/${character.max_hp}
-        ${enemy.name}'s HP: ${enemy.current_hp}/${enemy.max_hp}
-    `)
-    .setColor('#FF0000');
+        .setTitle(`${character.name} VS ${enemy.name}`)
+        .setDescription(`
+            ${character.name}'s HP: ${character.current_hp}/${character.max_hp}
+            ${enemy.name}'s HP: ${enemy.current_hp}/${enemy.max_hp}
+        `)
+        .setColor('#FF0000');
 
     const actionButtons = new ActionRowBuilder()
         .addComponents(
@@ -99,7 +99,7 @@ export const execute = async (interaction) => {
 
         switch(buttonInteraction.customId) {
             case 'attack':
-                enemy.current_hp -= (character.attack_damage - (enemy.armor*(1-character.armor_penetration)));
+                enemy.current_hp -= (character.attack_damage - (enemy.armor - (enemy.armor * character.armor_penetration)));
                 actionMessage = `${character.name} attacks!`;
                 break;
         }
