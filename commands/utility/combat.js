@@ -14,7 +14,7 @@ export const data = new SlashCommandBuilder()
 export const execute = async (interaction) => {
     const enemyName = interaction.options.getString('enemy');
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ });
 
     try {
         // Fetch character data
@@ -23,7 +23,7 @@ export const execute = async (interaction) => {
             .select(`
                 name, char_class, attack_damage, magic_damage, 
                 armor_penetration, magic_penetration, current_hp,
-                max_hp, armor, magic_armor, evasion, aspd, hit_rate
+                max_hp, armor, magic_armor, evasion, aspd, hit_rate, exp
             `)
             .eq('id', interaction.user.id)
             .single();
@@ -40,7 +40,7 @@ export const execute = async (interaction) => {
             .select(`
                 name, attack_damage, magic_damage, armor_penetration,
                 magic_penetration, armor, magic_armor, max_hp,
-                current_hp, evasion, aspd, hit_rate
+                current_hp, evasion, aspd, hit_rate, exp
             `)
             .eq('name', enemyName)
             .single();
@@ -54,18 +54,33 @@ export const execute = async (interaction) => {
         const combat = new CombatSystem(character, enemy);
 
         const createCombatEmbed = () => {
+            const combatStatus = `\`\`\`
+${combat.character.name} vs ${combat.enemy.name}
+
+${combat.character.name} HP: ${combat.character.current_hp}/${combat.character.max_hp}
+${combat.enemy.name} HP: ${combat.enemy.current_hp}/${combat.enemy.max_hp}
+\`\`\``;
+        
+            const battleLog = `\`\`\`
+${combat.combatLog.slice(-3).join('\n') || "Battle begins..."}
+\`\`\``;
+        
             return new EmbedBuilder()
-                .setTitle(`${combat.character.name} VS ${combat.enemy.name}`)
-                .setDescription(`
-                    **${combat.character.name}**
-                    HP: ${combat.character.current_hp}/${combat.character.max_hp}
-
-                    **${combat.enemy.name}**
-                    HP: ${combat.enemy.current_hp}/${combat.enemy.max_hp}
-
-                    ${combat.combatLog.slice(-3).join('\n')}
-                `)
-                .setColor('#FF0000');
+                .setTitle("⚔️ Battle in Progress")
+                .setDescription(`${combatStatus}\n${battleLog}`)
+                .setColor('#FF0000')
+                .setFooter({ text: "Use the buttons to take action" });
+        };
+        
+        const createVictoryEmbed = (expGained = 0) => {
+            const rewards = `\`\`\`
+Rewards: ${expGained} EXP gained!
+\`\`\``;
+        
+            return new EmbedBuilder()
+                .setTitle("🏆 Battle Results")
+                .setDescription(`${createCombatEmbed().data.description}\n${rewards}`)
+                .setColor('#00FF00');
         };
 
         const createActionButtons = () => {
@@ -97,37 +112,74 @@ export const execute = async (interaction) => {
                 if (buttonInteraction.customId === 'attack') {
                     if (combat.turn === 'enemy') {
                         result = combat.enemyTurn();
-                        if (!result.over) {
+                        if (!result?.over) {
                             result = combat.basicAttack();
                         }
                     } else {
                         result = combat.basicAttack();
-                        if (!result.over) {
+                        if (!result?.over) {
                             result = combat.enemyTurn();
                         }
                     }
                 }
-
+        
                 if (result?.over) {
                     collector.stop();
+                    
+                    if (character.name === result.winner) {
+                        const updatedExp = character.exp + enemy.exp;
+                        
+                        const { error: updateError } = await supabase
+                            .from('player')
+                            .update({ 
+                                exp: updatedExp,
+                                current_hp: combat.character.current_hp 
+                            })
+                            .eq('id', interaction.user.id);
+                        
+                        if (updateError) {
+                            console.error("EXP update error:", updateError);
+                            return await buttonInteraction.editReply({
+                                content: "❌ Couldn't save your rewards!",
+                                embeds: [createVictoryEmbed(0)],
+                                components: []
+                            });
+                        }
+                        
+                        return await buttonInteraction.update({
+                            embeds: [createVictoryEmbed(enemy.exp)],
+                            components: []
+                        });
+                    }
+                    
                     return await buttonInteraction.update({
-                        content: `🏆 ${result.winner} won the battle!`,
-                        embeds: [createCombatEmbed()],
+                        embeds: [createVictoryEmbed(0)],
                         components: []
                     });
                 }
-
+        
+                // Ongoing battle update
                 await buttonInteraction.update({
                     embeds: [createCombatEmbed()],
                     components: [createActionButtons()]
                 });
-
+        
             } catch (error) {
                 console.error('Combat error:', error);
-                await buttonInteraction.followUp({
-                    content: "❌ An error occurred during combat.",
-
-                });
+                
+                // Check if we can still edit the reply
+                if (buttonInteraction.deferred || buttonInteraction.replied) {
+                    await buttonInteraction.editReply({
+                        content: "❌ An error occurred during combat.",
+                        embeds: [],
+                        components: []
+                    });
+                } else {
+                    await buttonInteraction.reply({
+                        content: "❌ An error occurred during combat.",
+                        ephemeral: true
+                    });
+                }
             }
         });
 

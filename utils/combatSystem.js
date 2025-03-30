@@ -36,7 +36,7 @@ export class CombatSystem {
         while (this.characterAspd < this.enemyAspd) {
             const damage = this.calculateDamage(this.enemy, this.character, 'attack');
             this.character.current_hp = Math.max(0, this.character.current_hp - damage);
-            this.combatLog.push(`${this.enemy.name} attacks back for ${damage} damage!`);
+            this.combatLog.push(`${this.enemy.name} attacks for ${damage} damage!`); 
             this.characterAspd += this.character.aspd;
         }
         return this.checkBattleStatus();
