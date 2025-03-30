@@ -148,6 +148,22 @@ Rewards: ${expGained} EXP gained!
                         const statSystem = new StatSystem(character, interaction.user.id);
                         const result = await statSystem.checkLevelUp(enemy.exp);
 
+                        const { error: updateError } = await supabase
+                        .from('player')
+                        .update({ 
+                            current_hp: combat.character.current_hp
+                        })
+                        .eq('id', interaction.user.id);
+                    
+                        if (updateError) {
+                            console.error("Current HP update error:", updateError);
+                            return await buttonInteraction.editReply({
+                                content: "❌ Couldn't save your rewards!",
+                                embeds: [createVictoryEmbed(0)],
+                                components: []
+                            });
+                        }
+
                         if (result.leveledUp) {
                             await interaction.followUp(result.message);
                         }
