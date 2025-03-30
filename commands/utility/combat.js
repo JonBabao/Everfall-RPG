@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { supabase } from '../../supabase/supabase.js';
 import { CombatSystem } from '../../utils/combatSystem.js';
+import { StatSystem } from '../../utils/statSystem.js';
 
 export const data = new SlashCommandBuilder()
     .setName('combat')
@@ -19,14 +20,31 @@ export const execute = async (interaction) => {
     try {
         // Fetch character data
         const { data: character, error: charError } = await supabase
-            .from('player')
-            .select(`
-                name, char_class, attack_damage, magic_damage, 
-                armor_penetration, magic_penetration, current_hp,
-                max_hp, armor, magic_armor, evasion, aspd, hit_rate, exp
-            `)
-            .eq('id', interaction.user.id)
-            .single();
+        .from('player')
+        .select(`
+            name,
+            level,
+            exp,
+            str,
+            con,
+            int,
+            dex,
+            agi,
+            attack_damage,
+            magic_damage,
+            current_hp,
+            max_hp,
+            armor_penetration,
+            armor,
+            magic_penetration,
+            magic_armor,
+            hit_rate,
+            evasion,
+            aspd,
+            stat_point
+        `)
+        .eq('id', interaction.user.id)
+        .single();
 
         if (!character || charError) {
             return await interaction.editReply({
@@ -127,23 +145,11 @@ Rewards: ${expGained} EXP gained!
                     collector.stop();
                     
                     if (character.name === result.winner) {
-                        const updatedExp = character.exp + enemy.exp;
-                        
-                        const { error: updateError } = await supabase
-                            .from('player')
-                            .update({ 
-                                exp: updatedExp,
-                                current_hp: combat.character.current_hp 
-                            })
-                            .eq('id', interaction.user.id);
-                        
-                        if (updateError) {
-                            console.error("EXP update error:", updateError);
-                            return await buttonInteraction.editReply({
-                                content: "❌ Couldn't save your rewards!",
-                                embeds: [createVictoryEmbed(0)],
-                                components: []
-                            });
+                        const statSystem = new StatSystem(character, interaction.user.id);
+                        const result = await statSystem.checkLevelUp(enemy.exp);
+
+                        if (result.leveledUp) {
+                            await interaction.followUp(result.message);
                         }
                         
                         return await buttonInteraction.update({
