@@ -76,8 +76,8 @@ export class StatSystem {
     }
 
     canLevelUp(currentExp) {
-        return this.character.level < XP_CHART.length - 1 && 
-               currentExp >= XP_CHART[this.character.level + 1];
+        return this.character.level < XP_CHART.length && 
+            currentExp >= XP_CHART[this.character.level];
     }
 
     applyLevelUpStats(statGains) {
