@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { supabase } from '../../supabase/supabase.js';
 import { CombatSystem } from '../../utils/combatSystem.js';
 import { StatSystem } from '../../utils/statSystem.js';
+import { DropSystem } from '../../utils/getDrops.js';
 
 export const data = new SlashCommandBuilder()
     .setName('combat')
@@ -20,7 +21,7 @@ export const execute = async (interaction) => {
     try {
         // Fetch character data
         const { data: character, error: charError } = await supabase
-        .from('player')
+        .from('player') 
         .select(`
             name,
             level,
@@ -90,14 +91,19 @@ ${combat.combatLog.slice(-3).join('\n') || "Battle begins..."}
                 .setFooter({ text: "Use the buttons to take action" });
         };
         
-        const createVictoryEmbed = (expGained = 0) => {
-            const rewards = `\`\`\`
-Rewards: ${expGained} EXP gained!
-\`\`\``;
+        const createVictoryEmbed = (expGained = 0, drops = []) => {
+            let rewardsText = `\`\`\`
+Rewards: ${expGained} EXP gained!`;
+        
+            if (drops.length > 0) {
+                rewardsText += `\nDrops: ${drops.join(', ')}`;
+            }
+        
+            rewardsText += `\`\`\``;
         
             return new EmbedBuilder()
                 .setTitle("🏆 Battle Results")
-                .setDescription(`${createCombatEmbed().data.description}\n${rewards}`)
+                .setDescription(`${createCombatEmbed().data.description}\n${rewardsText}`)
                 .setColor('#00FF00');
         };
 
@@ -148,18 +154,26 @@ Rewards: ${expGained} EXP gained!
                         const statSystem = new StatSystem(character, interaction.user.id);
                         const result = await statSystem.checkLevelUp(enemy.exp);
 
+                        const obtainedDrops = await DropSystem.getDrops(enemy.name);
+                        let addedDrops = [];
+                        
+                        if (obtainedDrops.length > 0) {
+                            addedDrops = await DropSystem.addToInventory(interaction.user.id, obtainedDrops);
+                        }
+                        console.log("Drops:", addedDrops);
+
                         const { error: updateError } = await supabase
-                        .from('player')
-                        .update({ 
-                            current_hp: combat.character.current_hp
-                        })
-                        .eq('id', interaction.user.id);
+                            .from('player')
+                            .update({ 
+                                current_hp: combat.character.current_hp
+                            })
+                            .eq('id', interaction.user.id);
                     
                         if (updateError) {
                             console.error("Current HP update error:", updateError);
                             return await buttonInteraction.editReply({
                                 content: "❌ Couldn't save your rewards!",
-                                embeds: [createVictoryEmbed(0)],
+                                embeds: [createVictoryEmbed(0, addedDrops)],
                                 components: []
                             });
                         }
@@ -169,13 +183,13 @@ Rewards: ${expGained} EXP gained!
                         }
                         
                         return await buttonInteraction.update({
-                            embeds: [createVictoryEmbed(enemy.exp)],
+                            embeds: [createVictoryEmbed(enemy.exp, addedDrops)],
                             components: []
                         });
                     }
                     
                     return await buttonInteraction.update({
-                        embeds: [createVictoryEmbed(0)],
+                        embeds: [createVictoryEmbed(0, addedDrops)],
                         components: []
                     });
                 }
