@@ -9,13 +9,14 @@ export const data = new SlashCommandBuilder()
         .setDescription("Enter item name")
         .setRequired(true)
     )
-    .addStringOption(option =>
+    .addIntegerOption(option =>
         option.setName('quantity')
             .setDescription("How many would you like to sell?")
             .setRequired(true)
     );
 
 export const execute = async (interaction) => {
+    await interaction.deferReply();
     const itemName = interaction.options.getString('item');
     const quantityNum = interaction.options.getInteger('quantity');
 
@@ -27,8 +28,7 @@ export const execute = async (interaction) => {
 
     if (!character || charError) {
         return interaction.editReply({
-            content: "❌ You don't have a character yet! Use `/create` to make one.",
-            ephemeral: true
+            content: "❌ You don't have a character yet! Use `/create` to make one."
         });
     }
 
@@ -40,8 +40,7 @@ export const execute = async (interaction) => {
 
     if (!item || itemError) {
         return interaction.editReply({
-            content: "❌ This item doesn't exist!",
-            ephemeral: true
+            content: "❌ This item doesn't exist!"
         })
     }
 
@@ -50,31 +49,75 @@ export const execute = async (interaction) => {
         .select('player_id, item_id, quantity, is_equipped')
         .eq('player_id', interaction.user.id)
         .eq('item_id', item.id)
+        .single()
 
     if (!inventory || inventoryError) {
         return interaction.editReply({
-            content: "❌ You don't have this item!",
-            ephemeral: true
+            content: "❌ You don't have this item!"
         })
     }
 
     if (inventory.is_equipped) {
         return interaction.editReply({
-            content: "❌ You can't sell an equipped item!",
-            ephemeral: true
+            content: "❌ You can't sell an equipped item!"
         })
     }
 
     if (quantityNum > inventory.quantity) {
         return interaction.editReply({
-            content: `❌ You only have ${item.name} x${inventory.quantity}!`,
-            ephemeral: true
+            content: `❌ You only have ${item.name} x${inventory.quantity}!`
+        })
+    }
+    const newQuantity = inventory.quantity - quantityNum;
+    const gainedGold = quantityNum * item.price;
+    const currentGold = character.gold;
+    const newGold = currentGold + gainedGold;
+
+    console.log(`New Quantity: ${inventory.quantity} - ${quantityNum} = ${newQuantity}`);
+    console.log(`Current Gold: ${character.gold}`);
+    console.log(`Gained Gold: ${quantityNum} * ${item.price} = ${gainedGold}`);
+    console.log(`New Gold: ${currentGold} + ${gainedGold} = ${newGold}`);
+
+    if (newQuantity > 0) {
+        console.log("subtracting");
+        const { sellError } = await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity })
+            .eq('player_id', interaction.user.id)
+            .eq('item_id', item.id)
+
+        if (sellError) {
+            return interaction.editReply({
+                content: "There is an error while selling your item."
+            })
+        }    
+    } else {
+        console.log("deleting");
+        const { deleteError } = await supabase
+            .from('inventory')
+            .delete()
+            .eq('player_id', interaction.user.id)
+            .eq('item_id', item.id)
+        
+        if (deleteError) {
+            return interaction.editReply({
+                content: "There is an error while deleting the row."
+            })
+        }   
+    }
+
+    const { goldError } = await supabase
+        .from('player')
+        .update({ gold: newGold })
+        .eq('id', interaction.user.id)
+
+    if (goldError) {
+        return interaction.editReply({
+            content: "There is an error while adding gold."
         })
     }
 
-    if (quantityNum < inventory.quantity) {
-        
-    }
-    
-
+    await interaction.editReply({
+        content: `✅ Successfully sold ${itemName} (x${quantityNum}) for ${gainedGold} Gold!`
+    });
 }
