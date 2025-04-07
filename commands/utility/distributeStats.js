@@ -184,7 +184,7 @@ Attack Speed: ${(1 + (character.agi * 0.01)).toFixed(2)} → ${(1 + (previewStat
                         evasion: (character.agi + statChanges.agi) * 0.01,
                         aspd: (1 + (character.agi + statChanges.agi) * 0.01),
                         // Update weapon bonuses
-                        attack_damage: weaponBonuses.attack,
+                        attack_damage: weaponBonuses.attack + item.attributes.attack_damage,
                         magic_damage: weaponBonuses.magic,
                         // Maintain current HP percentage
                         current_hp: Math.min(
