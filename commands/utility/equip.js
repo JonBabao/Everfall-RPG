@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from "discord.js";
 import { supabase } from "../../supabase/supabase.js";
+import { calculateWeaponBonuses } from '../../utils/statCalculations.js';
 
 export const data = new SlashCommandBuilder()
     .setName('equip')
@@ -141,7 +142,7 @@ export const execute = async (interaction) => {
             updatedStats.aspd -= currentAttributes.aspd || 0;
 
 
-            const removedBonuses = calculateWeaponBonuses(currentItem.type, character);
+            const removedBonuses = await calculateWeaponBonuses(character, currentItem?.type);
             updatedStats.attack_damage -= removedBonuses.attack;
             updatedStats.magic_damage -= removedBonuses.magic;
         }
@@ -157,7 +158,7 @@ export const execute = async (interaction) => {
     updatedStats.evasion += evasion;
     updatedStats.aspd += aspd;
 
-    const newBonuses = calculateWeaponBonuses(newItem.type, character);
+    const newBonuses = await calculateWeaponBonuses(character, newItem.type);
     updatedStats.attack_damage += newBonuses.attack;
     updatedStats.magic_damage += newBonuses.magic;
 
@@ -213,30 +214,4 @@ export const execute = async (interaction) => {
         content: `✅ Successfully equipped ${itemName}! ${bonusMessage ? `(${bonusMessage})` : ''}`,
         ephemeral: true
     });
-}
-
-function calculateWeaponBonuses(weaponType, character) {
-    const result = { attack: 0, magic: 0 };
-    
-    switch(weaponType) {
-        case 'sword':
-        case 'hammer':
-            result.attack = character.str * 2;
-            break;
-        case 'spear':
-            result.attack = (character.str + character.dex) * 2;
-            break;
-        case 'fist':
-            result.attack = character.agi * 1;
-            break;
-        case 'dagger':
-        case 'bow':
-            result.attack = character.dex * 3;
-            break;
-        case 'magical_focus':
-            result.magic = character.int * 3;
-            break;
-    }
-    
-    return result;
 }
