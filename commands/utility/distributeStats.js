@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { supabase } from '../../supabase/supabase.js';
+import { calculateWeaponBonuses, calculateDerivedStats } from '../../utils/statCalculations.js';
 
 export const data = new SlashCommandBuilder()
     .setName('distribute')
@@ -22,6 +23,19 @@ export const execute = async (interaction) => {
             });
         }
 
+        const { data: item, error: itemError } = await supabase
+            .from('items')
+            .select('id, type, attributes')
+            .eq('name', character.weapon)
+            .single();
+
+        if (itemError || !item) {
+            return interaction.editReply({
+                content: "❌ Error fetching item!",
+                ephemeral: true
+            });
+        }
+
         if (character.stat_point <= 0) {
             return interaction.editReply({
                 content: "❌ You don't have any stat points to distribute!",
@@ -29,58 +43,69 @@ export const execute = async (interaction) => {
             });
         }
 
-        const calculateDerivedStats = (char) => ({
-            armor_penetration: (char.str * 0.01).toFixed(2),
-            max_hp: 100 + (char.con * 10),
-            armor: char.con,
-            magic_penetration: (char.int * 0.01).toFixed(2),
-            magic_armor: char.int,
-            hit_rate: (char.dex * 0.01).toFixed(2),
-            evasion: (char.agi * 0.01).toFixed(2),
-            aspd: (1 + (char.agi * 0.01)).toFixed(2)
-        });
-
         let currentDerived = calculateDerivedStats(character);
         const statChanges = {
             str: 0, con: 0, int: 0, dex: 0, agi: 0,
             remainingPoints: character.stat_point
         };
 
-        const createStatEmbed = () => new EmbedBuilder()
-            .setTitle(`${character.name}'s Stats`)
-            .setDescription(`You have **${statChanges.remainingPoints} stat points** available`)
-            .setColor('#0099ff')
-            .addFields(
-                { 
-                    name: 'Core Stats', 
-                    value: `
+        const createStatEmbed = async () => {
+            const previewStats = {
+                ...character,
+                str: character.str + statChanges.str,
+                con: character.con + statChanges.con,
+                int: character.int + statChanges.int,
+                dex: character.dex + statChanges.dex,
+                agi: character.agi + statChanges.agi
+            };
+            
+            const weaponBonuses = await calculateWeaponBonuses(previewStats, item.type);
+            const derivedStats = calculateDerivedStats(previewStats);
+            
+            return new EmbedBuilder()
+                .setTitle(`${character.name}'s Stats`)
+                .setDescription(`You have **${statChanges.remainingPoints} stat points** available`)
+                .setColor('#0099ff')
+                .addFields(
+                    { 
+                        name: 'Core Stats', 
+                        value: `
 \`\`\`
-STR: ${character.str} + ${statChanges.str} → ${character.str + statChanges.str}
-CON: ${character.con} + ${statChanges.con} → ${character.con + statChanges.con}
-INT: ${character.int} + ${statChanges.int} → ${character.int + statChanges.int}
-DEX: ${character.dex} + ${statChanges.dex} → ${character.dex + statChanges.dex}
-AGI: ${character.agi} + ${statChanges.agi} → ${character.agi + statChanges.agi}
+STR: ${character.str} + ${statChanges.str} → ${previewStats.str}
+CON: ${character.con} + ${statChanges.con} → ${previewStats.con}
+INT: ${character.int} + ${statChanges.int} → ${previewStats.int}
+DEX: ${character.dex} + ${statChanges.dex} → ${previewStats.dex}
+AGI: ${character.agi} + ${statChanges.agi} → ${previewStats.agi}
+\`\`\``,
+                        inline: false 
+                    },
+                    { 
+                        name: 'Weapon Bonuses', 
+                        value: `
 \`\`\`
-                `,
-                    inline: false 
-                },
-            { 
-                name: 'Derived Stats', 
-                value: `
+Weapon: ${character.weapon || 'None'}
+Attack: ${weaponBonuses.attack + item.attributes.attack_damage}
+Magic: ${weaponBonuses.magic}
+\`\`\``,
+                        inline: true
+                    },
+                    { 
+                        name: 'Derived Stats', 
+                        value: `
 \`\`\`
-Max HP: ${100 + (character.con * 10) + (character.level * 10)} → ${100 + ((character.con + statChanges.con) * 10) + (character.level * 10)}
-Armor: ${character.con} → ${character.con + statChanges.con}
-Magic Armor: ${character.int} → ${character.int + statChanges.int}
-Armor Pen: ${(character.str * 0.01).toFixed(2)}% → ${((character.str + statChanges.str) * 0.01).toFixed(2)}%
-Magic Pen: ${(character.int * 0.01).toFixed(2)}% → ${((character.int + statChanges.int) * 0.01).toFixed(2)}%
-Evasion: ${(character.agi * 0.01).toFixed(2)}% → ${((character.agi + statChanges.agi) * 0.01).toFixed(2)}%
-Hit Rate: ${(character.dex * 0.01).toFixed(2)}% → ${((character.dex + statChanges.dex) * 0.01).toFixed(2)}%
-Attack Speed: ${(character.agi * 0.01).toFixed(2)} → ${(((character.agi + statChanges.agi) * 0.01)).toFixed(2)}
-\`\`\`
-                `,
-                inline: false 
-            }
-        );
+Max HP: ${100 + (character.con * 10) + (character.level * 10)} → ${100 + (previewStats.con * 10) + (character.level * 10)}
+Armor: ${character.con} → ${previewStats.con}
+Magic Armor: ${character.int} → ${previewStats.int}
+Armor Pen: ${(character.str * 0.01).toFixed(2)}% → ${(previewStats.str * 0.01).toFixed(2)}%
+Magic Pen: ${(character.int * 0.01).toFixed(2)}% → ${(previewStats.int * 0.01).toFixed(2)}%
+Evasion: ${(character.agi * 0.01).toFixed(2)}% → ${(previewStats.agi * 0.01).toFixed(2)}%
+Hit Rate: ${(character.dex * 0.01).toFixed(2)}% → ${(previewStats.dex * 0.01).toFixed(2)}%
+Attack Speed: ${(1 + (character.agi * 0.01)).toFixed(2)} → ${(1 + (previewStats.agi * 0.01)).toFixed(2)}
+\`\`\``,
+                        inline: false 
+                    }
+                );
+        };
 
         const createActionRows = () => [
             new ActionRowBuilder().addComponents(
@@ -120,7 +145,7 @@ Attack Speed: ${(character.agi * 0.01).toFixed(2)} → ${(((character.agi + stat
         ];
 
         const message = await interaction.editReply({
-            embeds: [createStatEmbed()],
+            embeds: [await createStatEmbed()],
             components: createActionRows()
         });
 
@@ -132,7 +157,16 @@ Attack Speed: ${(character.agi * 0.01).toFixed(2)} → ${(((character.agi + stat
         collector.on('collect', async buttonInteraction => {
             try {
                 if (buttonInteraction.customId === 'confirm') {
-                    // Calculate final stats with changes
+                    // Calculate weapon bonuses for final update
+                    const weaponBonuses = await calculateWeaponBonuses({
+                        ...character,
+                        str: character.str + statChanges.str,
+                        con: character.con + statChanges.con,
+                        int: character.int + statChanges.int,
+                        dex: character.dex + statChanges.dex,
+                        agi: character.agi + statChanges.agi
+                    }, item.type);
+
                     const finalStats = {
                         str: character.str + statChanges.str,
                         con: character.con + statChanges.con,
@@ -148,11 +182,14 @@ Attack Speed: ${(character.agi * 0.01).toFixed(2)} → ${(((character.agi + stat
                         magic_armor: character.int + statChanges.int,
                         hit_rate: (character.dex + statChanges.dex) * 0.01,
                         evasion: (character.agi + statChanges.agi) * 0.01,
-                        aspd: ((character.agi + statChanges.agi) * 0.01),
+                        aspd: (1 + (character.agi + statChanges.agi) * 0.01),
+                        // Update weapon bonuses
+                        attack_damage: weaponBonuses.attack,
+                        magic_damage: weaponBonuses.magic,
                         // Maintain current HP percentage
                         current_hp: Math.min(
                             character.current_hp, 
-                            100 + ((character.con + statChanges.con) * 10)
+                            100 + ((character.con + statChanges.con) * 10) + (character.level * 10)
                         )
                     };
 
@@ -176,7 +213,7 @@ Attack Speed: ${(character.agi * 0.01).toFixed(2)} → ${(((character.agi + stat
                 statChanges.remainingPoints -= 1;
 
                 await buttonInteraction.update({
-                    embeds: [createStatEmbed()],
+                    embeds: [await createStatEmbed()],
                     components: createActionRows()
                 });
 
