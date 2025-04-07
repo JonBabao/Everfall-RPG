@@ -151,21 +151,12 @@ Rewards: ${expGained} EXP gained!`;
                     collector.stop();
                     
                     if (character.name === result.winner) {
-                        const statSystem = new StatSystem(character, interaction.user.id);
-                        const result = await statSystem.checkLevelUp(enemy.exp);
-
-                        const obtainedDrops = await DropSystem.getDrops(enemy.name);
-                        let addedDrops = [];
-                        
-                        if (obtainedDrops.length > 0) {
-                            addedDrops = await DropSystem.addToInventory(interaction.user.id, obtainedDrops);
-                        }
-                        console.log("Drops:", addedDrops);
-
+                        const newExp = enemy.exp + character.exp;
                         const { error: updateError } = await supabase
                             .from('player')
                             .update({ 
-                                current_hp: combat.character.current_hp
+                                current_hp: combat.character.current_hp,
+                                exp: newExp
                             })
                             .eq('id', interaction.user.id);
                     
@@ -177,6 +168,17 @@ Rewards: ${expGained} EXP gained!`;
                                 components: []
                             });
                         }
+
+                        const statSystem = new StatSystem(character, interaction.user.id);
+                        const result = await statSystem.checkLevelUp(enemy.exp);
+
+                        const obtainedDrops = await DropSystem.getDrops(enemy.name);
+                        let addedDrops = [];
+                        
+                        if (obtainedDrops.length > 0) {
+                            addedDrops = await DropSystem.addToInventory(interaction.user.id, obtainedDrops);
+                        }
+                        console.log("Drops:", addedDrops);
 
                         if (result.leveledUp) {
                             await interaction.followUp(result.message);
