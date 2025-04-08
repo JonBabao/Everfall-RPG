@@ -10,7 +10,7 @@ export const execute = async (interaction) => {
     
     const { data: character, error: charError } = await supabase
         .from('player')
-        .select('id, name, gold')
+        .select('id, name, gold, location')
         .eq('id', interaction.user.id)
         .single();
 
@@ -21,10 +21,14 @@ export const execute = async (interaction) => {
     }
 
     const { data: items, error: itemsError } = await supabase
-        .from('shop')
-        .select('items (name, price, description)') 
-        .eq('area', "home")
-
+    .from('shop_items')
+    .select(`
+        item_id,
+        shop_id,
+        items (name, price),
+        shop (name, owner, area, greeting)
+    `)
+    .eq('shop.area', character.location)  
 
     if (!items || itemsError || items.length === 0) {
         return interaction.editReply({
@@ -34,10 +38,15 @@ export const execute = async (interaction) => {
 
     const shopEmbed = new EmbedBuilder()
     .setColor('#0099ff')
-    .setTitle('🏪 Item Shop')
-    .setDescription(`Welcome to the shop, ${character.name}!\n\n` +
-        items.map(item => `• **${item.items.name}**: ${item.items.price} gold`).join('\n'))
-    .setFooter({ text: `Your balance: ${character.gold} gold` });
+    .setTitle(`🛒 ${items[0]?.shop?.name || 'Item Shop'}`)
+    .setDescription(
+        `\u200b
+        **${items[0]?.shop?.owner}:** ${items[0]?.shop?.greeting}\n\n` +
+        items.map(shopItem => 
+            `• **${shopItem.items.name}**: ${shopItem.items.price} gold`
+        ).join('\n')
+    )
+    .setFooter({ text: `Balance: ${character.gold} gold | Location: ${items[0]?.shop?.area || 'Unknown'}` });
 
-    await interaction.editReply({ embeds: [shopEmbed] });
+await interaction.editReply({ embeds: [shopEmbed] });
 };
