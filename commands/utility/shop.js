@@ -20,15 +20,21 @@ export const execute = async (interaction) => {
         });
     }
 
+    const { data: areaShop } = await supabase
+        .from('shop')
+        .select('id')
+        .eq('area', character.location)
+        .single()
+
     const { data: items, error: itemsError } = await supabase
-    .from('shop_items')
-    .select(`
-        item_id,
-        shop_id,
-        items (name, price),
-        shop (name, owner, area, greeting)
-    `)
-    .eq('shop.area', character.location)  
+        .from('shop_items')
+        .select(`
+            item_id,
+            shop_id,
+            items (name, price),
+            shop (name, owner, area, greeting)
+        `)
+        .eq('shop_id', areaShop.id) 
 
     if (!items || itemsError || items.length === 0) {
         return interaction.editReply({
@@ -37,16 +43,17 @@ export const execute = async (interaction) => {
     }
 
     const shopEmbed = new EmbedBuilder()
-    .setColor('#0099ff')
-    .setTitle(`🛒 ${items[0]?.shop?.name || 'Item Shop'}`)
-    .setDescription(
-        `\u200b
-        **${items[0]?.shop?.owner}:** ${items[0]?.shop?.greeting}\n\n` +
-        items.map(shopItem => 
-            `• **${shopItem.items.name}**: ${shopItem.items.price} gold`
-        ).join('\n')
-    )
-    .setFooter({ text: `Balance: ${character.gold} gold | Location: ${items[0]?.shop?.area || 'Unknown'}` });
+        .setColor('#0099ff')
+        .setTitle(`🛒 ${items[0]?.shop?.name || 'Item Shop'}`)
+        .setDescription(
+            `\u200b
+            **${items[0]?.shop?.owner}:** ${items[0]?.shop?.greeting}\n\n` +
+            items.map(shopItem => 
+                `• **${shopItem.items.name}**: ${shopItem.items.price} gold`
+            ).join('\n')
+        )
+        .setFooter({ text: `Balance: ${character.gold} gold | Location: ${items[0]?.shop?.area || 'Unknown'}` });
 
 await interaction.editReply({ embeds: [shopEmbed] });
 };
+
