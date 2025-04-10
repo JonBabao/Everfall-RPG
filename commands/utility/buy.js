@@ -22,7 +22,7 @@ export const execute = async (interaction) => {
 
     const { data: character, charError } = await supabase
         .from('player')
-        .select('id, name, gold')
+        .select('id, name, gold, location')
         .eq('id', interaction.user.id)
         .single()
 
@@ -44,6 +44,29 @@ export const execute = async (interaction) => {
         })
     }
 
+    const { data: areaShop } = await supabase
+        .from('shop')
+        .select('id')
+        .eq('area', character.location)
+        .single()
+
+    const { data: inShop } = await supabase
+        .from('shop_items')
+        .select(`
+            item_id,
+            shop_id,
+            items (name, price),
+            shop (name, owner, area, greeting)
+        `)
+        .eq('shop_id', areaShop.id)  
+        .eq('item_id', item.id)
+    
+    if (inShop.length === 0) {
+        return interaction.editReply({
+            content: `❌ **${itemName}** is not available in **${character.location}**!`
+        })
+    }
+
     const { data: inventory } = await supabase
         .from('inventory')
         .select('player_id, item_id, quantity, is_equipped')
@@ -51,7 +74,9 @@ export const execute = async (interaction) => {
         .eq('item_id', item.id)
         .single()
 
-    if ((quantityNum*item.price) > character.gold) {
+    const totalPrice = quantityNum*item.price;
+
+    if (totalPrice > character.gold) {
         return interaction.editReply({
             content: "❌ You don't have enough gold!"
         })
@@ -59,7 +84,7 @@ export const execute = async (interaction) => {
 
     if ((quantityNum*item.price) <= character.gold) {
 
-        const newGold = character.gold - (quantityNum*item.price);
+        const newGold = character.gold - totalPrice;
 
         if (!inventory) {
             const { error: buyError } = await supabase
@@ -103,7 +128,7 @@ export const execute = async (interaction) => {
         }
 
         return interaction.editReply({
-            content: `**${character.name}** bought ${item.name} (x${quantityNum})`
+            content: `✅ **${character.name}** successfully bought **${item.name}** (x${quantityNum}) for ${totalPrice} Gold!`
         })
     }
 } 
