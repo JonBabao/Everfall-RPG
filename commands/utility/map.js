@@ -1,12 +1,12 @@
-import { SlashCommandBuilder } from "discord.js";
-import { supabase } from "../../supabase/supabase";
+import { SlashCommandBuilder, EmbedBuilder } from "discord.js";
+import { supabase } from "../../supabase/supabase.js";
 
 export const data = new SlashCommandBuilder()
     .setName('map')
     .setDescription("Describe details of your current area!")
 
-    
 export const execute = async (interaction) => {
+    await interaction.deferReply();
 
     const { data: character, charError } = await supabase
         .from('player')
@@ -22,7 +22,7 @@ export const execute = async (interaction) => {
 
     const { data: map, mapError } = await supabase
         .from('map')
-        .select('name, shop_owner, monster')
+        .select('name, description, shop_owner, monster')
         .eq('name', character.location)
         .single()
 
@@ -33,17 +33,19 @@ export const execute = async (interaction) => {
     }
 
     const mapEmbed = new EmbedBuilder()
-        .setTitle(map.name)
-        .setDescription("**Map Details**")
+        .setTitle(`🗺️ ${map.name}`)
+        .setDescription(`*${map.description}*`)
         .addFields(
-            { name: 'NPCs', value: map.map(o => 
-                `• ${shop_owner}`
+            { name: '👥 NPCs', value: map.shop_owner.map(owner => 
+                `• ${owner}`
             ).join('\n'), inline: false },
-            { name: 'Monsters', value: map.monster.map(o => 
+            { name: '👾 Monsters', value: map.monster.map(monster => 
                 `• ${monster}`
             ).join('\n'), inline: false }
         )
-        .setColor(0x00AE86);
+        .setFooter({ text: '/map' })
+        .setColor(0x00AE86)
 
-    await interaction.reply({ embeds: [mapEmbed] });
+
+    await interaction.editReply({ embeds: [mapEmbed] });
 }
