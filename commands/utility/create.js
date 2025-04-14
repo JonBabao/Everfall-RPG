@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { supabase } from '../../supabase/supabase.js'
-import { getRaceBonuses } from '../../utils/characterUtils.js';
+import { getRaceBonuses } from '../../utils/raceUtils.js';
 
 export const data = new SlashCommandBuilder()
     .setName('create')
